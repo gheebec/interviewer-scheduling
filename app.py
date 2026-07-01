@@ -13,15 +13,12 @@ def get_global_db():
 
 global_db = get_global_db()
 
-# 3. URL 주소를 이용한 고유한 '면접 방(Room)' 생성 및 감지 (호환성 높은 코드로 변경)
+# 3. 최신 표준 문법으로 URL 주소 파라미터(?room=방이름) 감지 및 방 생성
+# st.query_parameters는 딕셔너리처럼 동작하므로 .get()을 사용해 안전하게 가져옵니다.
 try:
-    # 최신 버전 Streamlit용
-    query_params = st.query_parameters
-    room_id = query_params.get("room", "default_room")
-except AttributeError:
-    # 구버전 Streamlit용 안전장치
-    query_params = st.experimental_get_query_params()
-    room_id = query_params.get("room", ["default_room"])[0]
+    room_id = st.query_parameters.get("room", "default_room")
+except Exception:
+    room_id = "default_room"
 
 # 해당 방의 데이터 공간이 없다면 초기화
 if room_id not in global_db:
