@@ -4,7 +4,7 @@ from datetime import datetime
 
 # 1. 페이지 설정 및 제목
 st.set_page_config(page_title="실시간 면접 일정 조율기", layout="wide")
-st.title("🤝 실시간 다중 접속 면접 조율 시스템 (1단계 완성형)")
+st.title("🤝 실시간 다중 접속 면접 조율 시스템 (수정/취소 지원)")
 
 # 2. 전 세계 사용자가 실시간으로 공유할 전역 데이터베이스 공간 생성 (서버 메모리 공유 캐시)
 @st.cache_resource
@@ -14,7 +14,6 @@ def get_global_db():
 global_db = get_global_db()
 
 # 3. 최신 표준 문법으로 URL 주소 파라미터(?room=방이름) 감지 및 방 생성
-# st.query_parameters는 딕셔너리처럼 동작하므로 .get()을 사용해 안전하게 가져옵니다.
 try:
     room_id = st.query_parameters.get("room", "default_room")
 except Exception:
@@ -73,36 +72,63 @@ with left_col:
     ]
 
     # ----------------------------------------------------
-    # [구역 B] 면접관 일정 입력 (실시간 전역 저장)
+    # [구역 B] 면접관 일정 입력 (수정 및 취소 로직 반영)
     # ----------------------------------------------------
-    st.header("2. 면접관 일정 입력")
+    st.header("2. 면접관 일정 입력 / 수정")
     
-    with st.form("interviewer_form", clear_on_submit=True):
-        interviewer_name = st.text_input("👤 면접관 성함을 입력해 주세요 (필수)", placeholder="예: 홍길동 팀장")
+    # 💡 [핵심] 이름을 먼저 입력받아 기존 데이터가 있는지 실시간 조회
+    interviewer_name = st.text_input(" Anagram 👤 면접관 성함을 입력해 주세요 (필수)", placeholder="예: 홍길동 팀장").strip()
+    
+    if interviewer_name:
+        # 이미 등록된 면접관인지 확인
+        is_existing = interviewer_name in room_data["schedules"]
+        if is_existing:
+            st.warning(f"📢 **{interviewer_name}**님은 이미 일정을 제출하셨습니다. 아래에서 일정을 수정한 뒤 다시 제출하거나 삭제할 수 있습니다.")
+            existing_slots = room_data["schedules"][interviewer_name]
+        else:
+            st.info(f"🌱 **{interviewer_name}**님은 신규 등록 상태입니다. 가능한 시간을 선택해 주세요.")
+            existing_slots = []
+            
         st.write("⚠️ **본인이 참여 가능한 날짜와 시간을 모두 체크해 주세요.**")
         
-        interviewer_choices = []
-        for date in room_data["dates"]:
-            st.subheader(f"📅 {date}")
-            cols = st.columns(4)
-            for i, slot in enumerate(time_slots):
-                with cols[i % 4]:
-                    combined_slot = f"{date} [{slot}]"
-                    if st.checkbox(slot, key=f"{room_id}_{interviewer_name}_{combined_slot}"):
-                        interviewer_choices.append(combined_slot)
+        # 폼(Form) 시작
+        with st.form("interviewer_form", clear_on_submit=False):
+            interviewer_choices = []
+            
+            for date in room_data["dates"]:
+                st.subheader(f"📅 {date}")
+                cols = st.columns(4)
+                for i, slot in enumerate(time_slots):
+                    with cols[i % 4]:
+                        combined_slot = f"{date} [{slot}]"
                         
-        submit_btn = st.form_submit_button("일정 제출하기 (실시간 전송)")
-        
-        if submit_btn:
-            if not interviewer_name.strip():
-                st.error("🚨 이름을 적어야 일정을 제출할 수 있습니다.")
-            elif not interviewer_choices:
-                st.warning("🚨 가능한 시간대를 최소 하나 이상 선택해 주세요.")
-            else:
-                # 전역 데이터베이스 공간에 실시간으로 기록 보냄
-                room_data["schedules"][interviewer_name.strip()] = interviewer_choices
-                st.success(f"✅ {interviewer_name}님의 일정이 서버에 실시간으로 등록되었습니다! 화면을 새로고침해 확인하세요.")
+                        # 💡 [기능 추가] 기존에 골랐던 시간대라면 기본 체크박스를 True(선택됨)로 설정!
+                        is_checked = combined_slot in existing_slots
+                        
+                        if st.checkbox(slot, value=is_checked, key=f"{room_id}_{interviewer_name}_{combined_slot}"):
+                            interviewer_choices.append(combined_slot)
+            
+            # 버튼 레이아웃 나누기 (제출 / 삭제)
+            btn_col1, btn_col2 = st.columns([1, 4])
+            with btn_col1:
+                submit_btn = st.form_submit_button("일정 저장하기")
+            
+            if submit_btn:
+                if not interviewer_choices:
+                    st.warning("🚨 가능한 시간대를 최소 하나 이상 선택해 주세요. (아예 취소하려면 폼 밖의 일정 삭제 버튼을 이용해 주세요.)")
+                else:
+                    room_data["schedules"][interviewer_name] = interviewer_choices
+                    st.success(f"✅ {interviewer_name}님의 일정이 성공적으로 수정/저장되었습니다!")
+                    st.rerun()
+                    
+        # 💡 [취소 기능] 폼 외부에서 안전하게 내 일정 전체 삭제하기
+        if is_existing:
+            if st.button("❌ 내 일정 전체 삭제(취소)하기", type="secondary"):
+                del room_data["schedules"][interviewer_name]
+                st.success(f"🗑️ {interviewer_name}님의 투표 데이터가 완전히 삭제되었습니다.")
                 st.rerun()
+    else:
+        st.warning("💡 면접관 성함을 입력하시면 일정을 작성하거나 수정할 수 있는 체크박스가 나타납니다.")
 
 with right_col:
     # ----------------------------------------------------
@@ -110,7 +136,6 @@ with right_col:
     # ----------------------------------------------------
     st.header("📊 실시간 취합 현황")
     
-    # ⚡ 새로고침 버튼 배치
     if st.button("🔄 실시간 데이터 불러오기/새로고침"):
         st.rerun()
         
