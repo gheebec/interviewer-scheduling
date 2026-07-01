@@ -77,7 +77,7 @@ with left_col:
     st.header("2. 면접관 일정 입력 / 수정")
     
     # 💡 [핵심] 이름을 먼저 입력받아 기존 데이터가 있는지 실시간 조회
-    interviewer_name = st.text_input(" Anagram 👤 면접관 성함을 입력해 주세요 (필수)", placeholder="예: 홍길동 팀장").strip()
+    interviewer_name = st.text_input(" 👤 면접관 성함을 입력해 주세요 (필수)", placeholder="예: 홍길동 팀장").strip()
     
     if interviewer_name:
         # 이미 등록된 면접관인지 확인
