@@ -37,14 +37,10 @@ left_col, right_col = st.columns([2, 1])
 
 with left_col:
     # ----------------------------------------------------
-    # [구역 A] 방장 설정 구역 (날짜 지정 및 방 개설)
+    # [구역 A] 방장 설정 구역 (날짜 지정 및 방 개설/삭제)
     # ----------------------------------------------------
     st.header("1. [방장 설정] 면접 후보 날짜 관리")
     st.write("새로운 면접 방을 만들거나 날짜를 조정할 수 있습니다.")
-    
-    # 💡 [버그 수정] 현재 내 웹사이트의 진짜 도메인 주소를 자동으로 알아내기
-    # 주소창이 로컬이든 실제 배포 링크든 상관없이 자동으로 맞춰집니다.
-    current_url = "https://share.streamlit.io/" # 기본 주소 가이드용
     
     new_room_name = st.text_input("💡 새로운 면접 조율 방 만들기 (영문/숫자 추천)", placeholder="예: developer_2026")
     if st.button("새로운 면접 방 주소 생성하기"):
@@ -52,12 +48,37 @@ with left_col:
             clean_room = new_room_name.strip()
             st.success(f"🎉 **새로운 면접 방이 준비되었습니다!**")
             st.write("아래 링크를 마우스로 드래그해서 복사한 뒤, 면접관들에게 공유하거나 주소창에 넣고 이동하세요:")
-            
-            # 💡 한글 주소 대신 면접관이 직관적으로 뒤에 붙여 쓸 수 있도록 포맷 수정
             st.code(f"?room={clean_room}")
             st.caption(f"ℹ️ 지금 보고 계신 주소창 맨 뒤에 위의 `?room={clean_room}`을 붙여서 이동하시면 새 방이 즉시 열립니다!")
         else:
             st.error("🚨 방 이름을 입력해 주세요.")
+
+    # 💡 [기능 추가] 방장 전용 방 삭제/초기화 메뉴
+    with st.expander("🗑️ [방장 전용] 현재 방 삭제 및 초기화"):
+        st.warning(f"⚠️ 현재 `{room_id}` 방에 쌓인 면접관 투표 데이터와 확정 이력이 전부 영구 삭제됩니다.")
+        confirm_delete = st.checkbox("네, 이 방의 데이터를 모두 삭제하는 것에 동의합니다.", key="del_confirm_check")
+        
+        if st.button("🚨 현재 방 데이터 완전히 삭제하기", type="primary"):
+            if confirm_delete:
+                # 데이터베이스에서 해당 방 삭제 또는 초기화
+                if room_id == "default_room":
+                    # 기본 방은 삭제하면 에러가 날 수 있으므로 백지 상태로 초기화
+                    global_db["default_room"] = {
+                        "dates": ["2026-07-15", "2026-07-16"],
+                        "schedules": {},
+                        "history": []
+                    }
+                else:
+                    # 커스텀 방은 데이터베이스에서 완전히 제거
+                    global_db.pop(room_id, None)
+                
+                st.success("💥 방이 성공적으로 삭제되었습니다! 메인 페이지로 복귀합니다.")
+                
+                # 주소창에서 파라미터를 지우고 기본 방으로 리다이렉트
+                st.query_parameters.clear()
+                st.rerun()
+            else:
+                st.error("🚨 삭제하려면 위의 '동의합니다' 체크박스에 먼저 체크해 주세요.")
 
     st.write("---")
     # 날짜 다중 선택 달력
@@ -147,40 +168,4 @@ with right_col:
         for name, choices in room_data["schedules"].items():
             st.write(f"- **{name}**: {len(choices)}개 시간 선택 완료")
             with st.expander(f"{name}님이 선택한 상세 시간 보기"):
-                st.caption(", ".join(choices))
-                
-        all_votes = list(room_data["schedules"].values())
-        overlap_slots = set(all_votes[0])
-        for vote in all_votes[1:]:
-            overlap_slots = overlap_slots.intersection(set(vote))
-            
-        st.subheader("🎉 모두 가능한 황금 시간대")
-        if overlap_slots:
-            for slot in sorted(list(overlap_slots)):
-                st.info(f"⏰ {slot}")
-        else:
-            st.error("🚨 전원 일치하는 시간이 없습니다.")
-            
-        st.write("---")
-        with st.expander("🛠️ 현재 일정 확정 및 마감"):
-            confirm_title = st.text_input("면접 명칭 입력")
-            confirm_dt = st.text_input("최종 확정 일시")
-            if st.button("확정 후 과거 기록에 누적"):
-                if confirm_title and confirm_dt:
-                    room_data["history"].append({
-                        "📋 면접 명칭": confirm_title,
-                        "📅 확정 일시": confirm_dt,
-                        "👥 면접관": ", ".join(list(room_data["schedules"].keys()))
-                    })
-                    room_data["schedules"] = {}
-                    st.success("확정 기록 완료!")
-                    st.rerun()
-    else:
-        st.info("아직 제출된 면접관 일정이 없습니다.")
-
-    st.write("---")
-    st.header("📜 이 방의 확정 이력")
-    if room_data["history"]:
-        st.dataframe(pd.DataFrame(room_data["history"]), use_container_width=True, hide_index=True)
-    else:
-        st.caption("아직 이 방에서 확정된 과거 이력이 없습니다.")
+                st
